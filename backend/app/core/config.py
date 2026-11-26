@@ -13,12 +13,19 @@ class Settings(BaseModel):
     VERSION: str = "0.1.0"
     API_PREFIX: str = "/api"
     
-    # SQLite Database URL (Defaults to local file testpilot.db)
-    # Can be overridden via environment variable DATABASE_URL
+    # SQLite Database URL
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./testpilot.db")
     
+    # JWT Authentication Settings
+    # Minimum 32-byte secret key for HS256 HMAC encryption
+    JWT_SECRET_KEY: str = os.getenv(
+        "JWT_SECRET_KEY",
+        "testpilot-development-secret-key-32-bytes-minimum!!"
+    )
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    
     # Allowed Cross-Origin Resource Sharing (CORS) origins
-    # Allows Vite React development server on port 5173 to communicate with FastAPI
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

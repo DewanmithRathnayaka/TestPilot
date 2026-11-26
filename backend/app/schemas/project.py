@@ -42,12 +42,11 @@ class ProjectUpdate(BaseModel):
 class ProjectResponse(ProjectBase):
     """
     Schema returned to the client.
-    Includes database-generated fields: id, status, and created_at.
+    Includes database-generated fields: id, status, created_at, and owning user_id.
     """
     id: int
     status: str
     created_at: datetime
+    user_id: Optional[int] = None
 
-    # ConfigDict(from_attributes=True) allows Pydantic to read data directly
-    # from SQLAlchemy ORM model attributes (formerly orm_mode=True in Pydantic v1)
     model_config = ConfigDict(from_attributes=True)

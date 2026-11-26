@@ -8,7 +8,7 @@ This document tracks daily milestones, completed objectives, and upcoming phases
 
 | Week | Focus Area | Status |
 |---|---|---|
-| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–4 Complete) |
+| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–5 Complete) |
 | **Week 2 (Days 8–14)** | Docker Sandboxing, Pytest Engine & Result Processing | ⚪ Pending |
 | **Week 3 (Days 15–21)** | Frontend Dashboard, PDF Reporting & Final Hardening | ⚪ Pending |
 
@@ -42,30 +42,31 @@ This document tracks daily milestones, completed objectives, and upcoming phases
 
 - [x] **Day 4: SQLite & SQLAlchemy Database Development**
   - Installed SQLAlchemy 2.1.9 in backend virtual environment.
-  - Implemented database session management (`app/db/session.py`):
-    - Configured SQLite engine (`sqlite:///./testpilot.db`) with `connect_args={"check_same_thread": False}`.
-    - Created `SessionLocal` factory and declarative `Base`.
-    - Created FastAPI `get_db()` dependency with guaranteed `finally: db.close()`.
-  - Created SQLAlchemy ORM `Project` model (`app/models/project.py`):
-    - Table `projects` with columns: `id` (PK), `name`, `description`, `language`, `status`, `created_at`.
-  - Created Pydantic models (`app/schemas/project.py`):
-    - `ProjectCreate`, `ProjectUpdate`, and `ProjectResponse` with `ConfigDict(from_attributes=True)`.
-  - Implemented complete CRUD REST endpoints (`app/api/projects.py`):
-    - `POST /api/projects`: Create new project record (201 Created).
-    - `GET /api/projects`: List all stored projects (200 OK).
-    - `GET /api/projects/{id}`: Retrieve single project (200 OK or 404).
-    - `PUT /api/projects/{id}`: Update project details (200 OK or 404).
-    - `DELETE /api/projects/{id}`: Remove project record (200 OK or 404).
-  - Configured automatic table creation on startup (`Base.metadata.create_all(bind=engine)`).
-  - Verified persistence across database sessions and backend restarts.
+  - Implemented database session management (`app/db/session.py`): engine, `SessionLocal`, declarative `Base`, and `get_db()` dependency.
+  - Created SQLAlchemy ORM `Project` model (`app/models/project.py`) with columns: `id`, `name`, `description`, `language`, `status`, `created_at`.
+  - Created Pydantic models (`app/schemas/project.py`): `ProjectCreate`, `ProjectUpdate`, and `ProjectResponse`.
+  - Implemented complete CRUD REST endpoints (`app/api/projects.py`).
   - Built automated test suite (`backend/test_database.py`) passing 10/10 tests without regressions.
-  - Connected React frontend: added live SQLite project management dashboard with creation form, empty states, card grid, and deletion handling.
 
-- [ ] **Day 5: User Authentication & JWT Security**
-  - Implement password hashing using `bcrypt`.
-  - Create registration (`/register`) and login (`/login`) API endpoints.
-  - Implement JWT token generator and Bearer authentication dependency.
-  - Secure protected test endpoints.
+- [x] **Day 5: User Authentication & JWT Authorization**
+  - Installed security dependencies: `pwdlib[argon2]`, `pyjwt`, `python-multipart`, `email-validator`.
+  - Implemented cryptographic password hashing using Argon2id (`app/core/security.py`).
+  - Implemented JWT token generation and verification using HMAC-SHA256 (`HS256`) with a 60-minute expiration window.
+  - Created SQLAlchemy `User` model (`app/models/user.py`):
+    - Table `users` with columns: `id` (PK), `username` (unique), `email` (unique), `hashed_password`, `created_at`.
+    - One-to-many relationship with `projects` table (`cascade="all, delete-orphan"`).
+  - Updated `Project` model with `user_id` foreign key referencing `users.id` and `owner` relationship.
+  - Applied safe SQLite migration without data loss (`ALTER TABLE projects ADD COLUMN user_id INTEGER`).
+  - Implemented Authentication API endpoints (`app/api/auth.py`):
+    - `POST /api/auth/register`: Pydantic validation, duplicate checks, Argon2id hashing, returns 201 Created.
+    - `POST /api/auth/login`: OAuth2 password form, verifies hash, issues JWT access token.
+    - `GET /api/auth/me`: Protected endpoint returning user profile.
+  - Created reusable FastAPI authentication dependency `get_current_user` (`app/api/deps.py`).
+  - Enforced multi-tenant project authorization in `app/api/projects.py`:
+    - Users can only create, list, view, update, and delete their own projects.
+    - Unauthorized access attempts between different users strictly return `403 Forbidden`.
+  - Built automated test suite `backend/test_auth.py` passing 19/19 tests. Full pipeline now passes 37/37 tests.
+  - Connected React frontend: Login/Registration forms, JWT session handling, header user badge, sign out, and protected projects view.
 
 - [ ] **Day 6: Project Upload Pipeline & File Security**
   - Implement multipart ZIP upload endpoint (`/api/v1/projects/upload`).
