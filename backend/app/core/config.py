@@ -2,6 +2,7 @@
 Application Configuration
 Defines settings, constants, and environment configurations for TestPilot backend.
 """
+import os
 from typing import List
 from pydantic import BaseModel
 
@@ -11,6 +12,10 @@ class Settings(BaseModel):
     DESCRIPTION: str = "Automated Software Testing Platform for University Projects"
     VERSION: str = "0.1.0"
     API_PREFIX: str = "/api"
+    
+    # SQLite Database URL (Defaults to local file testpilot.db)
+    # Can be overridden via environment variable DATABASE_URL
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./testpilot.db")
     
     # Allowed Cross-Origin Resource Sharing (CORS) origins
     # Allows Vite React development server on port 5173 to communicate with FastAPI

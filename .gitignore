@@ -22,6 +22,11 @@ dist-ssr/
 .env.test.local
 .env.production.local
 
+# Databases & local storage
+*.db
+*.sqlite
+*.sqlite3
+
 # IDEs & Editors
 .vscode/
 .idea/

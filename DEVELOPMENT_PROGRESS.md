@@ -8,7 +8,7 @@ This document tracks daily milestones, completed objectives, and upcoming phases
 
 | Week | Focus Area | Status |
 |---|---|---|
-| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth & Upload Pipeline | 🟡 In Progress (Days 1–3 Complete) |
+| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–4 Complete) |
 | **Week 2 (Days 8–14)** | Docker Sandboxing, Pytest Engine & Result Processing | ⚪ Pending |
 | **Week 3 (Days 15–21)** | Frontend Dashboard, PDF Reporting & Final Hardening | ⚪ Pending |
 
@@ -22,7 +22,6 @@ This document tracks daily milestones, completed objectives, and upcoming phases
   - Clarified university project objectives and student learning goals.
   - Defined functional (FR-01 to FR-11) and non-functional requirements (NFR-01 to NFR-17).
   - Designed high-level client-server architecture with Docker sandbox model.
-  - Mapped complete upload-to-report execution workflow and sequence diagrams.
   - Authored foundational documentation: `README.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`, `DEVELOPMENT_PROGRESS.md`, `DECISIONS.md`.
   - Conducted 10-question fundamental knowledge check.
 
@@ -30,35 +29,37 @@ This document tracks daily milestones, completed objectives, and upcoming phases
   - Verified system environment: installed Python 3.12.10 and Node.js v26.13.1 (npm 11.20.0). Verified Git 2.55 and VS Code 1.147.
   - Created project directory structure: `backend/`, `frontend/`, `.gitignore`, `.env.example`.
   - Configured Python virtual environment (`backend/.venv`) and installed dependencies: `fastapi`, `uvicorn[standard]`, `pydantic`, `httpx`.
-  - Created initial FastAPI application in `backend/app/main.py` with `GET /api/health` returning operational status JSON.
+  - Created initial FastAPI application with `GET /api/health` returning operational status JSON.
   - Configured CORS middleware for local frontend origins (`http://localhost:5173`).
   - Created React frontend with Vite & TypeScript in `frontend/`.
-  - Created welcome UI displaying platform name, brand mark, subtitle, and dynamic backend connectivity status.
-  - Successfully connected frontend to backend and verified error states when backend is down.
+  - Created welcome UI displaying platform name, brand mark, and dynamic backend connectivity status.
 
 - [x] **Day 3: FastAPI Fundamentals & REST API Development**
-  - Learned REST principles, HTTP methods (GET, POST, PUT, DELETE), JSON structures, path/query parameters, and HTTP status codes (200, 201, 400, 404, 422, 500).
-  - Refactored backend into clean, modular structure:
-    - `backend/app/core/config.py`: Centralized application settings and CORS policies.
-    - `backend/app/schemas/health.py`: Pydantic models for health and application info responses.
-    - `backend/app/schemas/message.py`: Pydantic request/response models with field length validation.
-    - `backend/app/api/routes.py`: Modular API routing for all platform endpoints.
-    - `backend/app/main.py`: Application entry point with router registration.
-  - Implemented core REST endpoints:
-    - `GET /api/health`: Health status check.
-    - `GET /api/info`: Application name, version, and description.
-    - `GET /api/`: Welcome endpoint with links to docs.
-    - `POST /api/test-message`: Receives JSON payload with Pydantic validation (min/max length).
-    - `GET /api/greeting`: Query parameter endpoint (`?name=...`).
-    - `GET /api/items/{item_id}`: Error handling demonstrating custom `HTTPException(404)`.
-  - Verified Swagger interactive documentation at `http://localhost:8000/docs`.
-  - Built automated verification suite (`backend/test_api.py`) passing 8/8 tests.
-  - Enhanced React frontend with real-time status card and interactive POST test form.
+  - Mastered REST principles, HTTP methods, JSON structures, parameters, and HTTP status codes.
+  - Refactored backend into clean, modular structure (`core/config.py`, `schemas/`, `api/routes.py`, `app/main.py`).
+  - Implemented core REST endpoints: `/api/health`, `/api/info`, `/api/`, `/api/test-message` (validated POST), `/api/greeting`, and `/api/items/{id}` (404 handling).
+  - Verified Swagger documentation at `/docs` and automated test suite (`backend/test_api.py`) passing 8/8 tests.
 
-- [ ] **Day 4: Database Models & Migrations**
-  - Design SQLAlchemy database schema (`User`, `Project`, `TestRun`, `TestResult`).
-  - Setup SQLite database connection and session management.
-  - Implement base CRUD helper functions.
+- [x] **Day 4: SQLite & SQLAlchemy Database Development**
+  - Installed SQLAlchemy 2.1.9 in backend virtual environment.
+  - Implemented database session management (`app/db/session.py`):
+    - Configured SQLite engine (`sqlite:///./testpilot.db`) with `connect_args={"check_same_thread": False}`.
+    - Created `SessionLocal` factory and declarative `Base`.
+    - Created FastAPI `get_db()` dependency with guaranteed `finally: db.close()`.
+  - Created SQLAlchemy ORM `Project` model (`app/models/project.py`):
+    - Table `projects` with columns: `id` (PK), `name`, `description`, `language`, `status`, `created_at`.
+  - Created Pydantic models (`app/schemas/project.py`):
+    - `ProjectCreate`, `ProjectUpdate`, and `ProjectResponse` with `ConfigDict(from_attributes=True)`.
+  - Implemented complete CRUD REST endpoints (`app/api/projects.py`):
+    - `POST /api/projects`: Create new project record (201 Created).
+    - `GET /api/projects`: List all stored projects (200 OK).
+    - `GET /api/projects/{id}`: Retrieve single project (200 OK or 404).
+    - `PUT /api/projects/{id}`: Update project details (200 OK or 404).
+    - `DELETE /api/projects/{id}`: Remove project record (200 OK or 404).
+  - Configured automatic table creation on startup (`Base.metadata.create_all(bind=engine)`).
+  - Verified persistence across database sessions and backend restarts.
+  - Built automated test suite (`backend/test_database.py`) passing 10/10 tests without regressions.
+  - Connected React frontend: added live SQLite project management dashboard with creation form, empty states, card grid, and deletion handling.
 
 - [ ] **Day 5: User Authentication & JWT Security**
   - Implement password hashing using `bcrypt`.

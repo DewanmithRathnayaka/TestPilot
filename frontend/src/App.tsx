@@ -14,29 +14,35 @@ interface InfoData {
   status: string;
 }
 
-interface TestMessageResponse {
-  success: boolean;
-  confirmation: string;
-  echo: {
-    username: string;
-    message: string;
-  };
+interface Project {
+  id: number;
+  name: string;
+  description: string | null;
+  language: string;
+  status: string;
+  created_at: string;
 }
 
 export default function App() {
+  // System status state
   const [health, setHealth] = useState<HealthData | null>(null);
   const [info, setInfo] = useState<InfoData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Interactive POST test state
-  const [username, setUsername] = useState<string>('Student Tester');
-  const [testMsg, setTestMsg] = useState<string>('Hello from TestPilot React Frontend!');
-  const [postResponse, setPostResponse] = useState<TestMessageResponse | null>(null);
-  const [postError, setPostError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Projects state (Day 4 Database CRUD)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  // Fetch backend status on mount
+  // Project creation form state
+  const [newProjectName, setNewProjectName] = useState<string>('');
+  const [newProjectDesc, setNewProjectDesc] = useState<string>('');
+  const [newProjectLang, setNewProjectLang] = useState<string>('Python');
+  const [isCreating, setIsCreating] = useState<boolean>(false);
+  const [formFeedback, setFormFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Check backend health
   const checkBackendStatus = async () => {
     setLoading(true);
     setError(null);
@@ -46,12 +52,8 @@ export default function App() {
         fetch(API_ENDPOINTS.INFO),
       ]);
 
-      if (!resHealth.ok) {
-        throw new Error(`Health check returned HTTP status ${resHealth.status}`);
-      }
-      if (!resInfo.ok) {
-        throw new Error(`Info check returned HTTP status ${resInfo.status}`);
-      }
+      if (!resHealth.ok) throw new Error(`Health HTTP ${resHealth.status}`);
+      if (!resInfo.ok) throw new Error(`Info HTTP ${resInfo.status}`);
 
       const healthJson = await resHealth.json();
       const infoJson = await resInfo.json();
@@ -59,8 +61,8 @@ export default function App() {
       setHealth(healthJson);
       setInfo(infoJson);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown network error';
-      setError(`Cannot connect to TestPilot backend at ${API_BASE_URL}: ${errorMessage}`);
+      const msg = err instanceof Error ? err.message : 'Network error';
+      setError(`Cannot reach backend at ${API_BASE_URL}: ${msg}`);
       setHealth(null);
       setInfo(null);
     } finally {
@@ -68,53 +70,94 @@ export default function App() {
     }
   };
 
+  // Fetch real projects from SQLite database
+  const fetchProjects = async () => {
+    setProjectsLoading(true);
+    setProjectsError(null);
+    try {
+      const res = await fetch(API_ENDPOINTS.PROJECTS);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch projects (HTTP ${res.status})`);
+      }
+      const data: Project[] = await res.json();
+      setProjects(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown database error';
+      setProjectsError(msg);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
   useEffect(() => {
     checkBackendStatus();
+    fetchProjects();
   }, []);
 
-  // Handle interactive POST testing
-  const handleSendTestMessage = async (e: React.FormEvent) => {
+  // Handle project creation
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setPostError(null);
-    setPostResponse(null);
+    setIsCreating(true);
+    setFormFeedback(null);
 
     try {
-      const res = await fetch(API_ENDPOINTS.TEST_MESSAGE, {
+      const res = await fetch(API_ENDPOINTS.PROJECTS, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username,
-          message: testMsg,
+          name: newProjectName,
+          description: newProjectDesc || null,
+          language: newProjectLang,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        // FastAPI returns 422 with { detail: [...] } for validation errors
-        throw new Error(JSON.stringify(data.detail || data, null, 2));
+        throw new Error(data.detail ? JSON.stringify(data.detail) : 'Failed to save project');
       }
 
-      setPostResponse(data);
+      setFormFeedback({
+        type: 'success',
+        message: `Project "${data.name}" created with ID #${data.id} in SQLite!`,
+      });
+      setNewProjectName('');
+      setNewProjectDesc('');
+      fetchProjects(); // Refresh database list
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setPostError(message);
+      const msg = err instanceof Error ? err.message : String(err);
+      setFormFeedback({ type: 'error', message: msg });
     } finally {
-      setIsSubmitting(false);
+      setIsCreating(false);
+    }
+  };
+
+  // Handle project deletion
+  const handleDeleteProject = async (id: number, name: string) => {
+    if (!confirm(`Are you sure you want to delete project #${id} "${name}" from SQLite?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_ENDPOINTS.PROJECTS}/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Remove from state immediately
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: unknown) {
+      alert(`Failed to delete project: ${err instanceof Error ? err.message : err}`);
     }
   };
 
   return (
     <div className="app-container">
-      {/* Navigation Header */}
+      {/* Header */}
       <header className="header">
         <div className="logo-container">
           <span className="logo-icon">✈️</span>
           <div className="logo-text">
             <h1>TestPilot</h1>
-            <span className="badge">Day 3 Setup</span>
+            <span className="badge">Day 4 – SQLite & SQLAlchemy</span>
           </div>
         </div>
         <div className="header-status">
@@ -130,48 +173,45 @@ export default function App() {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Main Content */}
       <main className="main-content">
         <section className="hero">
           <h2>Automated Software Testing Platform</h2>
           <p className="hero-subtitle">
-            Welcome to Day 3 of development! This platform bridges React, FastAPI,
-            and isolated Docker sandboxes for university code evaluation.
+            Day 4: Relational persistence layer active. Records are saved directly
+            to SQLite database (<code>testpilot.db</code>) via SQLAlchemy ORM.
           </p>
         </section>
 
-        {/* Backend Connection Status Card */}
+        {/* Backend Status Card */}
         <section className="card status-card">
           <div className="card-header">
-            <h3>Backend Connectivity Status</h3>
+            <h3>Backend & Database Connection</h3>
             <button onClick={checkBackendStatus} className="btn-refresh" disabled={loading}>
               {loading ? 'Checking...' : '↻ Re-check'}
             </button>
           </div>
-
           <div className="card-body">
             {loading && (
               <div className="status-badge loading">
                 <span className="dot pulse"></span>
-                Connecting to FastAPI backend at {API_BASE_URL}...
+                Connecting to FastAPI backend...
               </div>
             )}
-
             {error && (
               <div className="status-badge error">
                 <span className="dot error-dot"></span>
-                <strong>Connection Error:</strong> {error}
+                <strong>Disconnected:</strong> {error}
                 <p className="help-text">
-                  Make sure the backend is running with: <code>uvicorn app.main:app --reload</code>
+                  Start backend with: <code>uvicorn app.main:app --reload</code>
                 </p>
               </div>
             )}
-
             {health && info && !loading && (
               <div className="status-badge success">
                 <div className="badge-row">
                   <span className="dot success-dot"></span>
-                  <strong>🟢 Backend Connected & Operational</strong>
+                  <strong>🟢 Backend Operational & SQLite Connected</strong>
                 </div>
                 <div className="info-grid">
                   <div className="info-item">
@@ -179,16 +219,16 @@ export default function App() {
                     <span className="value">{info.name}</span>
                   </div>
                   <div className="info-item">
-                    <span className="label">API Version:</span>
+                    <span className="label">Version:</span>
                     <span className="value">{info.version}</span>
                   </div>
                   <div className="info-item">
-                    <span className="label">Health Status:</span>
-                    <span className="value">{health.status}</span>
+                    <span className="label">Database:</span>
+                    <span className="value">SQLite 3 (testpilot.db)</span>
                   </div>
                   <div className="info-item">
-                    <span className="label">Server Message:</span>
-                    <span className="value">{health.message}</span>
+                    <span className="label">ORM:</span>
+                    <span className="value">SQLAlchemy 2.1</span>
                   </div>
                 </div>
               </div>
@@ -196,58 +236,125 @@ export default function App() {
           </div>
         </section>
 
-        {/* Interactive REST API Verification Panel */}
-        <section className="card api-test-card">
+        {/* Day 4: Projects Management Section */}
+        <section className="card projects-card">
           <div className="card-header">
-            <h3>Interactive API Test (POST /api/test-message)</h3>
-            <span className="sub-tag">Pydantic Validation Demonstration</span>
+            <div>
+              <h3>Stored Projects</h3>
+              <span className="sub-tag">Retrieved live via GET /api/projects</span>
+            </div>
+            <button onClick={fetchProjects} className="btn-refresh" disabled={projectsLoading}>
+              {projectsLoading ? 'Loading...' : '↻ Refresh List'}
+            </button>
           </div>
 
           <div className="card-body">
-            <p className="instruction">
-              Test how FastAPI receives JSON payloads and how Pydantic enforces validation rules
-              (Username: 2–50 chars, Message: 3–500 chars).
-            </p>
-
-            <form onSubmit={handleSendTestMessage} className="test-form">
-              <div className="form-group">
-                <label>Username (min 2 chars):</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                  required
-                />
+            {/* Project Creation Form */}
+            <form onSubmit={handleCreateProject} className="project-form">
+              <h4>Create New Project Record (POST /api/projects)</h4>
+              <div className="form-row">
+                <div className="form-group flex-2">
+                  <label>Project Name *</label>
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="e.g. My Pytest Project"
+                    required
+                    minLength={2}
+                  />
+                </div>
+                <div className="form-group flex-1">
+                  <label>Language</label>
+                  <select
+                    value={newProjectLang}
+                    onChange={(e) => setNewProjectLang(e.target.value)}
+                  >
+                    <option value="Python">Python</option>
+                  </select>
+                </div>
               </div>
 
               <div className="form-group">
-                <label>Test Message (min 3 chars):</label>
-                <input
-                  type="text"
-                  value={testMsg}
-                  onChange={(e) => setTestMsg(e.target.value)}
-                  placeholder="Enter message"
-                  required
+                <label>Description (Optional)</label>
+                <textarea
+                  value={newProjectDesc}
+                  onChange={(e) => setNewProjectDesc(e.target.value)}
+                  placeholder="Short description of the project"
+                  rows={2}
                 />
               </div>
 
-              <button type="submit" className="btn-submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Sending Request...' : 'Send POST Request'}
+              <button type="submit" className="btn-submit" disabled={isCreating}>
+                {isCreating ? 'Saving to SQLite...' : '+ Add Project to Database'}
               </button>
+
+              {formFeedback && (
+                <div className={`form-feedback ${formFeedback.type}`}>
+                  {formFeedback.message}
+                </div>
+              )}
             </form>
 
-            {postResponse && (
-              <div className="response-box success-box">
-                <h4>✅ 201 Created Response from Server:</h4>
-                <pre>{JSON.stringify(postResponse, null, 2)}</pre>
+            <hr className="divider" />
+
+            {/* Project List Display */}
+            <h4>Projects in Database ({projects.length})</h4>
+
+            {projectsLoading && (
+              <div className="empty-state">
+                <span className="dot pulse"></span> Loading projects from SQLite...
               </div>
             )}
 
-            {postError && (
-              <div className="response-box error-box">
-                <h4>❌ Validation Error (422 Unprocessable Entity):</h4>
-                <pre>{postError}</pre>
+            {projectsError && (
+              <div className="status-badge error">
+                <strong>Error loading projects:</strong> {projectsError}
+              </div>
+            )}
+
+            {!projectsLoading && !projectsError && projects.length === 0 && (
+              <div className="empty-state">
+                <p>📂 No projects stored in SQLite yet.</p>
+                <p className="subtext">Use the form above to add your first project record.</p>
+              </div>
+            )}
+
+            {!projectsLoading && !projectsError && projects.length > 0 && (
+              <div className="projects-grid">
+                {projects.map((proj) => (
+                  <div key={proj.id} className="project-card">
+                    <div className="project-card-header">
+                      <div>
+                        <span className="project-id-tag">#{proj.id}</span>
+                        <h5 className="project-title">{proj.name}</h5>
+                      </div>
+                      <span className={`status-pill status-${proj.status.toLowerCase()}`}>
+                        {proj.status}
+                      </span>
+                    </div>
+
+                    <p className="project-desc">
+                      {proj.description || <em>No description provided</em>}
+                    </p>
+
+                    <div className="project-card-footer">
+                      <div className="meta-info">
+                        <span className="lang-tag">🐍 {proj.language}</span>
+                        <span className="date-tag">
+                          {new Date(proj.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteProject(proj.id, proj.name)}
+                        className="btn-delete"
+                        title="Delete project from SQLite"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -256,7 +363,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>TestPilot – University Software Testing Platform • Day 3 Complete</p>
+        <p>TestPilot – University Software Testing Platform • Day 4 SQLite Complete</p>
       </footer>
     </div>
   );

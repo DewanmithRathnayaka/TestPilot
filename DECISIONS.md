@@ -14,6 +14,7 @@ This document records the foundational architectural and technical decisions mad
 - [ADR-007: Standardized Predefined Project Directory Convention](#adr-007-standardized-predefined-project-directory-convention)
 - [ADR-008: Modular Backend Structure with Schemas, Routes, and Config](#adr-008-modular-backend-structure-with-schemas-routes-and-config)
 - [ADR-009: Centralized Frontend API Service Configuration](#adr-009-centralized-frontend-api-service-configuration)
+- [ADR-010: SQLAlchemy 2.0 ORM with Dependency Session Management](#adr-010-sqlalchemy-20-orm-with-dependency-session-management)
 
 ---
 
@@ -37,7 +38,7 @@ This document records the foundational architectural and technical decisions mad
 - **Status:** Accepted
 - **Context:** The UI requires real-time feedback (loading states, test progress, collapsible stack traces) and clean visual presentation.
 - **Decision:** Build client as a Single Page Application using React 18, Vite, and TypeScript.
-- **Consequences:** Type safety prevents runtime UI bugs; bundle sizes remain compact (< 150 KB uncompressed); instantaneous hot reloading.
+- **Consequences:** Type safety prevents runtime UI bugs; bundle sizes remain compact (< 155 KB uncompressed); instantaneous hot reloading.
 
 ---
 
@@ -52,7 +53,7 @@ This document records the foundational architectural and technical decisions mad
 ## ADR-005: Database Selection: SQLite with SQLAlchemy ORM
 - **Status:** Accepted
 - **Context:** Need persistent storage without the operational overhead of a standalone database server for the 21-day MVP.
-- **Decision:** Use SQLite through SQLAlchemy ORM.
+- **Decision:** Use SQLite stored as a local file (`testpilot.db`) accessed via SQLAlchemy ORM.
 - **Consequences:** Zero configuration; seamless future migration to PostgreSQL simply by changing the connection URL.
 
 ---
@@ -75,18 +76,26 @@ This document records the foundational architectural and technical decisions mad
 
 ## ADR-008: Modular Backend Structure with Schemas, Routes, and Config
 - **Status:** Accepted (Day 3)
-- **Context:** A monolithic `main.py` file quickly becomes unmanageable as endpoints, data validation schemas, and configurations expand.
-- **Decision:** Separate backend into:
-  - `app/core/config.py`: Centralized settings (project metadata, CORS origins).
-  - `app/schemas/`: Pydantic models for data contracts and validation.
-  - `app/api/routes.py`: Endpoint route definitions and business logic dispatch.
-  - `app/main.py`: Lean FastAPI application setup and middleware mounting.
+- **Context:** A monolithic file quickly becomes unmanageable as endpoints, data validation schemas, and configurations expand.
+- **Decision:** Separate backend into: `app/core/config.py`, `app/schemas/`, `app/api/`, and `app/main.py`.
 - **Consequences:** Clean separation of concerns, testability, and high maintainability.
 
 ---
 
 ## ADR-009: Centralized Frontend API Service Configuration
 - **Status:** Accepted (Day 3)
-- **Context:** Hardcoding backend URLs (like `http://localhost:8000`) across React components causes broken links when deploying or running on alternate ports.
-- **Decision:** Store the backend base URL in `frontend/src/config.ts` powered by Vite environment variables (`import.meta.env.VITE_API_BASE_URL`).
+- **Context:** Hardcoding backend URLs across React components causes broken links when deploying.
+- **Decision:** Store backend base URL in `frontend/src/config.ts` powered by Vite environment variables (`import.meta.env.VITE_API_BASE_URL`).
 - **Consequences:** All components import endpoints from a single source of truth; switching environments requires only editing `.env`.
+
+---
+
+## ADR-010: SQLAlchemy 2.0 ORM with Dependency Session Management
+- **Status:** Accepted (Day 4)
+- **Context:** Managing database transactions and connection lifecycles manually inside API routes leads to connection leaks and concurrency errors.
+- **Decision:** Implement SQLAlchemy 2.0 with the FastAPI dependency pattern:
+  - `SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)`
+  - `get_db()` generator yielding `db` and closing it in a `finally` block.
+  - Enable `connect_args={"check_same_thread": False}` for SQLite multi-threaded access.
+  - Decouple ORM persistence models (`app/models/`) from API contract schemas (`app/schemas/`).
+- **Consequences:** Automatic session cleanup after every HTTP request; complete isolation between persistence and presentation layers.

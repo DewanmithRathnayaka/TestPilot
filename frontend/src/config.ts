@@ -11,4 +11,5 @@ export const API_ENDPOINTS = {
   ROOT: `${API_BASE_URL}/api/`,
   GREETING: `${API_BASE_URL}/api/greeting`,
   TEST_MESSAGE: `${API_BASE_URL}/api/test-message`,
+  PROJECTS: `${API_BASE_URL}/api/projects`,
 };
