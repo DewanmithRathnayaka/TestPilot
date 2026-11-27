@@ -29,6 +29,10 @@ interface Project {
   status: string;
   created_at: string;
   user_id?: number;
+  original_filename?: string | null;
+  source_file_count: number;
+  test_file_count: number;
+  validation_status: string;
 }
 
 export default function App() {
@@ -56,12 +60,11 @@ export default function App() {
   const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  // Project creation form state
-  const [newProjectName, setNewProjectName] = useState<string>('');
-  const [newProjectDesc, setNewProjectDesc] = useState<string>('');
-  const [newProjectLang, setNewProjectLang] = useState<string>('Python');
-  const [isCreating, setIsCreating] = useState<boolean>(false);
-  const [formFeedback, setFormFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // Day 6 ZIP Upload State
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadLoading, setUploadLoading] = useState<boolean>(false);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Check backend health
   const checkBackendStatus = async () => {
@@ -102,7 +105,6 @@ export default function App() {
         setCurrentUser(user);
         fetchProjects(authToken);
       } else {
-        // Token invalid or expired
         handleLogout();
       }
     } catch {
@@ -143,7 +145,6 @@ export default function App() {
     setAuthSuccess(null);
 
     try {
-      // FastAPI OAuth2PasswordRequestForm expects URL-encoded form data
       const formData = new URLSearchParams();
       formData.append('username', username);
       formData.append('password', password);
@@ -182,11 +183,7 @@ export default function App() {
       const res = await fetch(API_ENDPOINTS.AUTH_REGISTER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          email,
-          password,
-        }),
+        body: JSON.stringify({ username, email, password }),
       });
 
       const data = await res.json();
@@ -215,53 +212,67 @@ export default function App() {
     setProjects([]);
     setAuthSuccess(null);
     setAuthError(null);
+    setSelectedFile(null);
+    setUploadSuccess(null);
+    setUploadError(null);
   };
 
-  // Handle Project Creation (Protected)
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token) return;
+  // Handle ZIP File Selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+      setUploadError(null);
+      setUploadSuccess(null);
+    }
+  };
 
-    setIsCreating(true);
-    setFormFeedback(null);
+  // Handle Day 6 ZIP Project Upload
+  const handleUploadProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFile || !token) return;
+
+    setUploadLoading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
 
     try {
-      const res = await fetch(API_ENDPOINTS.PROJECTS, {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const res = await fetch(API_ENDPOINTS.PROJECTS_UPLOAD, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          // Notice: Content-Type is omitted so browser sets multipart boundary automatically
         },
-        body: JSON.stringify({
-          name: newProjectName,
-          description: newProjectDesc || null,
-          language: newProjectLang,
-        }),
+        body: formData,
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail ? JSON.stringify(data.detail) : 'Failed to save project');
+        throw new Error(data.detail || 'Upload failed.');
       }
 
-      setFormFeedback({
-        type: 'success',
-        message: `Project "${data.name}" created with ID #${data.id} in SQLite!`,
-      });
-      setNewProjectName('');
-      setNewProjectDesc('');
+      setUploadSuccess(
+        `✓ Project "${data.name}" uploaded successfully! Validated: ${data.source_file_count} Python files, ${data.test_file_count} Pytest test files.`
+      );
+      setSelectedFile(null);
+      // Reset the file input element
+      const fileInput = document.getElementById('project-zip-input') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
       fetchProjects(token);
     } catch (err: unknown) {
-      setFormFeedback({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+      setUploadError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsCreating(false);
+      setUploadLoading(false);
     }
   };
 
   // Handle Project Deletion (Protected)
   const handleDeleteProject = async (id: number, name: string) => {
     if (!token) return;
-    if (!confirm(`Are you sure you want to delete your project #${id} "${name}"?`)) return;
+    if (!confirm(`Are you sure you want to delete project #${id} "${name}"?`)) return;
 
     try {
       const res = await fetch(`${API_ENDPOINTS.PROJECTS}/${id}`, {
@@ -278,6 +289,13 @@ export default function App() {
     }
   };
 
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -286,7 +304,7 @@ export default function App() {
           <span className="logo-icon">✈️</span>
           <div className="logo-text">
             <h1>TestPilot</h1>
-            <span className="badge">Day 5 – Auth & JWT</span>
+            <span className="badge">Day 6 – Secure ZIP Upload</span>
           </div>
         </div>
 
@@ -321,12 +339,12 @@ export default function App() {
         <section className="hero">
           <h2>Automated Software Testing Platform</h2>
           <p className="hero-subtitle">
-            Day 5: Secure user registration, password hashing (Argon2id),
-            JSON Web Tokens (JWT), and multi-tenant project authorization.
+            Day 6: Secure project upload pipeline. Protects against Zip Slip,
+            decompression bombs, symlinks, and enforces standard Pytest project layouts.
           </p>
         </section>
 
-        {/* Backend & DB Health Card */}
+        {/* Backend Status Card */}
         <section className="card status-card">
           <div className="card-header">
             <h3>System Status</h3>
@@ -341,7 +359,7 @@ export default function App() {
               <div className="status-badge success">
                 <div className="badge-row">
                   <span className="dot success-dot"></span>
-                  <strong>🟢 System Operational (FastAPI + SQLite + JWT Security)</strong>
+                  <strong>🟢 System Operational (FastAPI + SQLite + Secure Uploads)</strong>
                 </div>
               </div>
             )}
@@ -438,147 +456,164 @@ export default function App() {
                   </button>
                 </form>
               )}
-
-              <div className="security-note">
-                <small>
-                  🔒 <strong>Educational Security Note:</strong> Passwords are cryptographically hashed using
-                  <strong> Argon2id</strong>. Tokens are stored in browser <code>localStorage</code> for this development MVP.
-                  Production systems typically use <code>HttpOnly, SameSite=Strict</code> cookies to protect against Cross-Site Scripting (XSS).
-                </small>
-              </div>
             </div>
           </section>
         )}
 
-        {/* Protected Projects Management Section (Shown when logged in) */}
+        {/* Protected Project Upload & Management (Shown when logged in) */}
         {currentUser && (
-          <section className="card projects-card">
-            <div className="card-header">
-              <div>
-                <h3>My Projects (Multi-Tenant Authorized)</h3>
-                <span className="sub-tag">Logged in as {currentUser.username} • User ID #{currentUser.id}</span>
+          <>
+            {/* Day 6: ZIP Upload Box */}
+            <section className="card upload-card">
+              <div className="card-header">
+                <div>
+                  <h3>Upload Python Project (.ZIP)</h3>
+                  <span className="sub-tag">Max 10 MB • Standard Pytest Layout</span>
+                </div>
               </div>
-              <button onClick={() => fetchProjects(token!)} className="btn-refresh" disabled={projectsLoading}>
-                {projectsLoading ? 'Loading...' : '↻ Refresh My Projects'}
-              </button>
-            </div>
 
-            <div className="card-body">
-              {/* Project Creation Form */}
-              <form onSubmit={handleCreateProject} className="project-form">
-                <h4>+ Add New Project (Owned by {currentUser.username})</h4>
-                <div className="form-row">
-                  <div className="form-group flex-2">
-                    <label>Project Name *</label>
+              <div className="card-body">
+                <div className="layout-guide">
+                  <strong>Expected Project Layout:</strong>
+                  <code>
+                    project_name.zip &gt; src/ (*.py) + tests/ (test_*.py) + requirements.txt
+                  </code>
+                </div>
+
+                <form onSubmit={handleUploadProject} className="upload-form">
+                  <div className="file-drop-area">
                     <input
-                      type="text"
-                      value={newProjectName}
-                      onChange={(e) => setNewProjectName(e.target.value)}
-                      placeholder="e.g. Data Structures Test Suite"
-                      required
-                      minLength={2}
+                      type="file"
+                      id="project-zip-input"
+                      accept=".zip,application/zip"
+                      onChange={handleFileChange}
+                      className="file-input"
                     />
+                    <label htmlFor="project-zip-input" className="file-label">
+                      <span className="upload-icon">📦</span>
+                      <span className="file-prompt">
+                        {selectedFile ? selectedFile.name : 'Click to select project .ZIP archive'}
+                      </span>
+                      {selectedFile && (
+                        <span className="file-size-badge">
+                          {formatFileSize(selectedFile.size)}
+                        </span>
+                      )}
+                    </label>
                   </div>
-                  <div className="form-group flex-1">
-                    <label>Language</label>
-                    <select
-                      value={newProjectLang}
-                      onChange={(e) => setNewProjectLang(e.target.value)}
-                    >
-                      <option value="Python">Python</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="form-group">
-                  <label>Description (Optional)</label>
-                  <textarea
-                    value={newProjectDesc}
-                    onChange={(e) => setNewProjectDesc(e.target.value)}
-                    placeholder="Short description of the project"
-                    rows={2}
-                  />
-                </div>
+                  <button
+                    type="submit"
+                    className="btn-submit btn-upload"
+                    disabled={!selectedFile || uploadLoading}
+                  >
+                    {uploadLoading ? 'Inspecting & Extracting Safely...' : '🚀 Upload & Validate Project'}
+                  </button>
+                </form>
 
-                <button type="submit" className="btn-submit" disabled={isCreating}>
-                  {isCreating ? 'Saving to SQLite...' : '+ Add Project to Database'}
-                </button>
-
-                {formFeedback && (
-                  <div className={`form-feedback ${formFeedback.type}`}>
-                    {formFeedback.message}
+                {uploadSuccess && (
+                  <div className="status-badge success">
+                    <strong>Upload Succeeded:</strong> {uploadSuccess}
                   </div>
                 )}
-              </form>
 
-              <hr className="divider" />
+                {uploadError && (
+                  <div className="status-badge error">
+                    <strong>Validation Rejected:</strong> {uploadError}
+                  </div>
+                )}
+              </div>
+            </section>
 
-              <h4>Your Stored Projects ({projects.length})</h4>
-
-              {projectsLoading && (
-                <div className="empty-state">
-                  <span className="dot pulse"></span> Loading projects for {currentUser.username}...
+            {/* Projects List Card */}
+            <section className="card projects-card">
+              <div className="card-header">
+                <div>
+                  <h3>My Projects ({projects.length})</h3>
+                  <span className="sub-tag">Authenticated as {currentUser.username}</span>
                 </div>
-              )}
+                <button onClick={() => fetchProjects(token!)} className="btn-refresh" disabled={projectsLoading}>
+                  {projectsLoading ? 'Loading...' : '↻ Refresh Projects'}
+                </button>
+              </div>
 
-              {projectsError && (
-                <div className="status-badge error">
-                  <strong>Error loading projects:</strong> {projectsError}
-                </div>
-              )}
+              <div className="card-body">
+                {projectsLoading && (
+                  <div className="empty-state">
+                    <span className="dot pulse"></span> Loading projects for {currentUser.username}...
+                  </div>
+                )}
 
-              {!projectsLoading && !projectsError && projects.length === 0 && (
-                <div className="empty-state">
-                  <p>📂 You have not uploaded any projects yet.</p>
-                  <p className="subtext">Use the form above to add a project owned by your account.</p>
-                </div>
-              )}
+                {projectsError && (
+                  <div className="status-badge error">
+                    <strong>Error:</strong> {projectsError}
+                  </div>
+                )}
 
-              {!projectsLoading && !projectsError && projects.length > 0 && (
-                <div className="projects-grid">
-                  {projects.map((proj) => (
-                    <div key={proj.id} className="project-card">
-                      <div className="project-card-header">
-                        <div>
-                          <span className="project-id-tag">Project #{proj.id}</span>
-                          <h5 className="project-title">{proj.name}</h5>
-                        </div>
-                        <span className={`status-pill status-${proj.status.toLowerCase()}`}>
-                          {proj.status}
-                        </span>
-                      </div>
+                {!projectsLoading && !projectsError && projects.length === 0 && (
+                  <div className="empty-state">
+                    <p>📂 No projects uploaded yet.</p>
+                    <p className="subtext">Upload your first Python project ZIP archive above.</p>
+                  </div>
+                )}
 
-                      <p className="project-desc">
-                        {proj.description || <em>No description provided</em>}
-                      </p>
-
-                      <div className="project-card-footer">
-                        <div className="meta-info">
-                          <span className="lang-tag">🐍 {proj.language}</span>
-                          <span className="date-tag">
-                            {new Date(proj.created_at).toLocaleDateString()}
+                {!projectsLoading && !projectsError && projects.length > 0 && (
+                  <div className="projects-grid">
+                    {projects.map((proj) => (
+                      <div key={proj.id} className="project-card">
+                        <div className="project-card-header">
+                          <div>
+                            <span className="project-id-tag">Project #{proj.id}</span>
+                            <h5 className="project-title">{proj.name}</h5>
+                          </div>
+                          <span className={`status-pill status-${proj.validation_status.toLowerCase()}`}>
+                            {proj.validation_status}
                           </span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteProject(proj.id, proj.name)}
-                          className="btn-delete"
-                          title="Delete project from SQLite"
-                        >
-                          🗑️ Delete
-                        </button>
+
+                        <p className="project-desc">
+                          {proj.description || <em>No description provided</em>}
+                        </p>
+
+                        <div className="project-stats-grid">
+                          <div className="stat-pill">
+                            <span className="stat-label">Source Files</span>
+                            <span className="stat-val">📄 {proj.source_file_count}</span>
+                          </div>
+                          <div className="stat-pill">
+                            <span className="stat-label">Test Files</span>
+                            <span className="stat-val">🧪 {proj.test_file_count}</span>
+                          </div>
+                        </div>
+
+                        <div className="project-card-footer">
+                          <div className="meta-info">
+                            <span className="lang-tag">🐍 {proj.language}</span>
+                            <span className="date-tag">
+                              {new Date(proj.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteProject(proj.id, proj.name)}
+                            className="btn-delete"
+                            title="Delete project"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          </>
         )}
       </main>
 
       {/* Footer */}
       <footer className="footer">
-        <p>TestPilot – University Software Testing Platform • Day 5 Authentication Complete</p>
+        <p>TestPilot – University Software Testing Platform • Day 6 Secure Upload Complete</p>
       </footer>
     </div>
   );

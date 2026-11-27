@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
   GREETING: `${API_BASE_URL}/api/greeting`,
   TEST_MESSAGE: `${API_BASE_URL}/api/test-message`,
   PROJECTS: `${API_BASE_URL}/api/projects`,
+  PROJECTS_UPLOAD: `${API_BASE_URL}/api/projects/upload`,
   AUTH_REGISTER: `${API_BASE_URL}/api/auth/register`,
   AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
   AUTH_ME: `${API_BASE_URL}/api/auth/me`,

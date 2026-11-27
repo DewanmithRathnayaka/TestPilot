@@ -17,28 +17,20 @@ This document records the foundational architectural and technical decisions mad
 - [ADR-010: SQLAlchemy 2.0 ORM with Dependency Session Management](#adr-010-sqlalchemy-20-orm-with-dependency-session-management)
 - [ADR-011: Argon2id Password Hashing and Stateless JWT Authentication](#adr-011-argon2id-password-hashing-and-stateless-jwt-authentication)
 - [ADR-012: Multi-Tenant Project Authorization via Foreign Key Ownership](#adr-012-multi-tenant-project-authorization-via-foreign-key-ownership)
+- [ADR-013: Defense-in-Depth ZIP Extraction and Static Project Validation](#adr-013-defense-in-depth-zip-extraction-and-static-project-validation)
 
 ---
 
-## ADR-011: Argon2id Password Hashing and Stateless JWT Authentication
-- **Status:** Accepted (Day 5)
-- **Context:** TestPilot must authenticate university students and evaluators without exposing user credentials or requiring complex server-side session stores.
+## ADR-013: Defense-in-Depth ZIP Extraction and Static Project Validation
+- **Status:** Accepted (Day 6)
+- **Context:** Untrusted user-uploaded ZIP archives present critical attack vectors: Zip Slip (path traversal outside target directory), Zip Bombs (extreme compression ratio causing disk/memory exhaustion), and disguised executables.
 - **Decision:**
-  - Use `pwdlib` with the **Argon2id** algorithm for password hashing.
-  - Issue cryptographically signed **JSON Web Tokens (JWT)** using the `HS256` HMAC-SHA256 algorithm.
-  - Require the `Authorization: Bearer <token>` HTTP header for all protected endpoints.
-- **Rationale:**
-  - *Argon2id vs. MD5/SHA256:* Fast hash functions (MD5/SHA) can be brute-forced at billions of hashes per second on modern GPUs. Argon2id is memory-hard and time-hard, winning the Password Hashing Competition (PHC).
-  - *Stateless JWT vs. Stateful Sessions:* JWT tokens carry the user identity inside the signed payload (`sub`). The server validates the signature mathematically without needing to query a Redis session store on every HTTP hop.
-- **Consequences:** Highly scalable, stateless authentication. Token invalidation prior to expiration requires token blacklisting in production.
-
----
-
-## ADR-012: Multi-Tenant Project Authorization via Foreign Key Ownership
-- **Status:** Accepted (Day 5)
-- **Context:** Multiple students and evaluators submit code on TestPilot. Student A must never be able to inspect, modify, or delete Student B's projects.
-- **Decision:**
-  - Add `user_id = Column(Integer, ForeignKey("users.id"))` to the `projects` table.
-  - All project queries and mutations in `app/api/projects.py` are strictly scoped to `Project.user_id == current_user.id`.
-  - Attempts to view or mutate another user's project by guessing the project ID immediately return `403 Forbidden`.
-- **Consequences:** Strict multi-tenant data isolation; complete privacy between students.
+  - Enforce bounded stream reading (10 MB upload ceiling) to prevent memory exhaustion before saving.
+  - Inspect ZIP magic header bytes (`PK\x03\x04` / `PK\x05\x06`) rather than trusting client-supplied file extensions or MIME types.
+  - Defend against Zip Slip by resolving every entry's path and asserting it is strictly relative to the target extraction root using `pathlib.Path.relative_to()`.
+  - Cap total uncompressed size at 50 MB, individual files at 10 MB, entry count at 500, and reject archives exceeding a 100:1 compression ratio.
+  - Reject POSIX symbolic links (`0o120000`).
+  - Extract into an isolated, internal directory: `uploads/projects/user_{id}/{uuid}/`.
+  - Enforce static structure validation (`src/` with `.py` files and `tests/` with `test_*.py` files) **without executing any code or installing dependencies**.
+  - Prune temporary directories on any validation failure.
+- **Consequences:** Safe, predictable file ingestion with zero risk of host filesystem compromise.

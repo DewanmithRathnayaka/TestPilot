@@ -8,7 +8,7 @@ This document tracks daily milestones, completed objectives, and upcoming phases
 
 | Week | Focus Area | Status |
 |---|---|---|
-| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–5 Complete) |
+| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–6 Complete) |
 | **Week 2 (Days 8–14)** | Docker Sandboxing, Pytest Engine & Result Processing | ⚪ Pending |
 | **Week 3 (Days 15–21)** | Frontend Dashboard, PDF Reporting & Final Hardening | ⚪ Pending |
 
@@ -68,16 +68,33 @@ This document tracks daily milestones, completed objectives, and upcoming phases
   - Built automated test suite `backend/test_auth.py` passing 19/19 tests. Full pipeline now passes 37/37 tests.
   - Connected React frontend: Login/Registration forms, JWT session handling, header user badge, sign out, and protected projects view.
 
-- [ ] **Day 6: Project Upload Pipeline & File Security**
-  - Implement multipart ZIP upload endpoint (`/api/v1/projects/upload`).
-  - Enforce file size limits (15 MB max).
-  - Implement safe unzipping with Zip Slip prevention.
-  - Create isolated user storage directories.
+- [x] **Day 6: Project Upload Pipeline & File Security**
+  - Designed secure upload service (`app/services/upload_service.py`):
+    - Streamed reading with strict bounded buffer (10 MB max upload limit).
+    - File header magic bytes verification (`PK` prefix) rejecting disguised executables or text files.
+    - Comprehensive Zip Slip protection: path traversal rejection for `..`, absolute paths, Windows drive paths, and target directory escape validation via `is_relative_to()`.
+    - Zip Bomb defenses: 50 MB total uncompressed size limit, 10 MB single file limit, 500 entry limit, 100:1 compression ratio threshold.
+    - Rejection of symbolic links (`0o120000` mode) and special filesystem entries.
+    - Isolated storage allocation: `uploads/projects/user_{id}/{uuid}/`.
+    - Automatic cleanup: corrupted or invalid archives are pruned from disk on error.
+  - Implemented static Python project structure validation:
+    - Enforced mandatory standard layout: `src/` (with `.py` files) and `tests/` (with `test_*.py` files).
+    - Rejects projects missing `src/` or `tests/` with clear student-friendly diagnostics.
+    - Statically inspects filesystem structure without executing code or installing dependencies.
+  - Updated SQLite database schema safely:
+    - Added `original_filename`, `storage_path`, `source_file_count`, `test_file_count`, `validation_status` to `projects` table.
+    - Preserved existing database records with zero data loss.
+  - Implemented authenticated upload API endpoint:
+    - `POST /api/projects/upload` accepting multipart ZIP files with Bearer token authentication.
+    - Returns safe metadata (`ProjectResponse`) while keeping internal storage paths private.
+  - Built automated test suite `backend/test_upload.py` passing 17/17 tests (normal, validation, and security attack vectors).
+  - Full automated regression pipeline passing 54/54 tests across Days 3–6.
+  - Connected React frontend: added ZIP upload dropzone, file size indicator, extraction progress feedback, and project card file counters.
 
-- [ ] **Day 7: Project Structure Validation & Static Analysis**
-  - Build validator service to verify required project layout (`src/`, `tests/`, etc.).
-  - Scan `src/` modules and Pytest test functions using Python `ast`.
-  - Display project diagnostics before execution.
+- [ ] **Day 7: Project Static Analysis & Code Discovery**
+  - Scan `src/` modules and Pytest test functions using Python `ast` (Abstract Syntax Trees).
+  - Extract discovered function signatures, class definitions, and test names.
+  - Store code metrics and test suite catalog in database.
 
 ---
 

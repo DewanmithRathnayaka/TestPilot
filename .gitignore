@@ -27,6 +27,12 @@ dist-ssr/
 *.sqlite
 *.sqlite3
 
+# Uploaded project archives & extracted storage
+uploads/
+temp_projects/
+sandbox_work/
+*.log
+
 # IDEs & Editors
 .vscode/
 .idea/
@@ -36,8 +42,3 @@ dist-ssr/
 # OS files
 .DS_Store
 Thumbs.db
-
-# TestPilot temporary execution storage
-temp_projects/
-sandbox_work/
-*.log

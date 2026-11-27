@@ -1,8 +1,8 @@
 # TestPilot – Automated Software Testing Platform
 
-[![Project Status: Day 5 Complete](https://img.shields.io/badge/Status-Day%205%20Auth%20%26%20JWT%20Complete-brightgreen.svg)](#)
+[![Project Status: Day 6 Complete](https://img.shields.io/badge/Status-Day%206%20Secure%20ZIP%20Upload%20Complete-brightgreen.svg)](#)
 [![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.12-brightgreen.svg)](#)
-[![Security](https://img.shields.io/badge/Security-Argon2id%20%7C%20JWT%20Bearer-blue.svg)](#)
+[![Security](https://img.shields.io/badge/Security-Zip%20Slip%20Guard%20%7C%20Argon2id%20%7C%20JWT-blue.svg)](#)
 [![Database](https://img.shields.io/badge/Database-SQLite%20%7C%20SQLAlchemy%202.1-blue.svg)](#)
 [![Frontend](https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript%20%7C%20Vite-blue.svg)](#)
 
@@ -11,7 +11,23 @@
 
 ---
 
-## 🏗️ 2. Current Project Layout
+## 📁 2. Supported Project Structure
+All uploaded archives must conform to the standard Pytest layout:
+```text
+project_name/
+├── src/
+│   ├── main.py
+│   └── calculator.py
+├── tests/
+│   ├── test_main.py
+│   └── test_calculator.py
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 🏗️ 3. Current Project Layout
 ```text
 TestPilot/
 ├── backend/
@@ -28,29 +44,33 @@ TestPilot/
 │   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py          <-- SQLAlchemy ORM model for 'users' table
-│   │   │   └── project.py       <-- SQLAlchemy ORM model with user_id foreign key
+│   │   │   └── project.py       <-- SQLAlchemy ORM model with upload metadata and user_id FK
 │   │   ├── schemas/
 │   │   │   ├── __init__.py
 │   │   │   ├── health.py        <-- Pydantic schemas for health & info
 │   │   │   ├── message.py       <-- Pydantic schemas for test messages
-│   │   │   ├── project.py       <-- Pydantic schemas for Project CRUD
+│   │   │   ├── project.py       <-- Pydantic schemas for Project CRUD & Upload
 │   │   │   └── user.py          <-- Pydantic schemas for Registration, Login, Token, Profile
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   └── upload_service.py<-- Secure ZIP upload, Zip Slip defense, and static validation
 │   │   └── api/
 │   │       ├── __init__.py
 │   │       ├── deps.py          <-- get_current_user OAuth2 Bearer security dependency
 │   │       ├── routes.py        <-- General endpoints (/health, /info, /greeting)
 │   │       ├── auth.py          <-- Authentication endpoints (/register, /login, /me)
-│   │       └── projects.py      <-- Multi-tenant authorized project CRUD endpoints
+│   │       └── projects.py      <-- Authorized project CRUD and /upload endpoints
 │   ├── .venv/                   <-- Isolated Python 3.12 virtual environment
 │   ├── requirements.txt         <-- Python dependencies
 │   ├── test_api.py              <-- Day 3 test suite (8 tests)
 │   ├── test_database.py         <-- Day 4 database test suite (10 tests)
-│   ├── test_auth.py             <-- Day 5 authentication & authorization test suite (19 tests)
+│   ├── test_auth.py             <-- Day 5 authentication test suite (19 tests)
+│   ├── test_upload.py           <-- Day 6 secure upload test suite (17 tests)
 │   └── .env.example
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx              <-- Dashboard with JWT login/register & authorized projects
+│   │   ├── App.tsx              <-- Dashboard with JWT auth & Day 6 project ZIP upload UI
 │   │   ├── main.tsx             <-- React entrypoint
 │   │   ├── config.ts            <-- Centralized API endpoint URLs
 │   │   ├── index.css            <-- Polished dark-mode developer styling
@@ -60,53 +80,51 @@ TestPilot/
 │   ├── vite.config.ts
 │   └── .env
 │
+├── uploads/                     <-- Secure internal project storage (ignored by Git)
 ├── testpilot.db                 <-- Local SQLite database (users & projects tables)
 ├── .gitignore                   <-- Clean version control exclusions
 ├── .env.example                 <-- Global environment template
 ├── README.md                    <-- This documentation
 ├── REQUIREMENTS.md              <-- Functional (FR-01..11) & Non-Functional (NFR-01..17) Specs
 ├── ARCHITECTURE.md              <-- Architecture blueprints and Mermaid workflow
-├── DEVELOPMENT_PROGRESS.md      <-- 21-Day milestone tracker (Days 1–5 Complete)
-└── DECISIONS.md                 <-- Architectural Decision Records (ADR-001..012)
+├── DEVELOPMENT_PROGRESS.md      <-- 21-Day milestone tracker (Days 1–6 Complete)
+└── DECISIONS.md                 <-- Architectural Decision Records (ADRs 001–013)
 ```
 
 ---
 
-## ⚡ 3. How to Run TestPilot Locally
+## ⚡ 4. How to Run TestPilot Locally
 
-### Starting the Backend (FastAPI + SQLite + JWT)
+### Starting the Backend (FastAPI + SQLite + Upload Service)
 In terminal 1:
 ```bash
-# Navigate to backend and run with virtual environment Python
 cd backend
 .venv\Scripts\uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 - API Base URL: `http://localhost:8000`
 - Interactive Swagger Documentation: `http://localhost:8000/docs`
-- Registration: `POST /api/auth/register`
-- Login: `POST /api/auth/login`
-- Current User Profile: `GET /api/auth/me`
+- ZIP Upload Endpoint: `POST /api/projects/upload`
 
 ### Starting the Frontend (React + Vite)
 In terminal 2:
 ```bash
-# Navigate to frontend and start Vite development server
 cd frontend
 npm run dev
 ```
 - Frontend Dashboard: `http://localhost:5173`
 
-### Running the Full Automated Test Pipeline (37 Tests)
+### Running the Full Automated Test Pipeline (54 Tests)
 ```bash
 python backend/test_api.py
 python backend/test_database.py
 python backend/test_auth.py
+python backend/test_upload.py
 ```
 
 ---
 
-## 📖 4. Documentation Index
+## 📖 5. Documentation Index
 - [REQUIREMENTS.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/REQUIREMENTS.md): Functional and Non-Functional Requirements.
 - [ARCHITECTURE.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/ARCHITECTURE.md): System architecture, sequence diagram, and security sandbox model.
-- [DEVELOPMENT_PROGRESS.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/DEVELOPMENT_PROGRESS.md): 21-Day progress tracker (Days 1–5 Complete).
-- [DECISIONS.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/DECISIONS.md): Architectural Decision Records (ADRs 001–012).
+- [DEVELOPMENT_PROGRESS.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/DEVELOPMENT_PROGRESS.md): 21-Day progress tracker (Days 1–6 Complete).
+- [DECISIONS.md](file:///c:/Users/chanu/OneDrive/Desktop/new%20Testpilot/DECISIONS.md): Architectural Decision Records (ADRs 001–013).

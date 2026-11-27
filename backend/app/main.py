@@ -14,18 +14,33 @@ from app.api.routes import router as general_router
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 
-# 1. Auto-create missing database tables (creates 'users' table if not present)
+# 1. Auto-create missing database tables
 Base.metadata.create_all(bind=engine)
 
-# 2. Safe Schema Migration Check for Day 5
-# Ensures the 'user_id' column exists on 'projects' table without deleting existing records
+# 2. Safe Schema Migration Check
+# Automatically adds missing columns without deleting existing data
 def apply_migrations():
     with engine.connect() as conn:
         result = conn.execute(text("PRAGMA table_info(projects);"))
         columns = [row[1] for row in result.fetchall()]
+        
+        # Day 5 migration: user_id foreign key
         if "user_id" not in columns:
             conn.execute(text("ALTER TABLE projects ADD COLUMN user_id INTEGER REFERENCES users(id);"))
-            conn.commit()
+        
+        # Day 6 migrations: upload and validation metadata
+        if "original_filename" not in columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN original_filename VARCHAR(255);"))
+        if "storage_path" not in columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN storage_path VARCHAR(500);"))
+        if "source_file_count" not in columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN source_file_count INTEGER DEFAULT 0 NOT NULL;"))
+        if "test_file_count" not in columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN test_file_count INTEGER DEFAULT 0 NOT NULL;"))
+        if "validation_status" not in columns:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN validation_status VARCHAR(50) DEFAULT 'Pending' NOT NULL;"))
+            
+        conn.commit()
 
 apply_migrations()
 
@@ -63,5 +78,6 @@ def root_redirect():
         "health": f"{settings.API_PREFIX}/health",
         "auth": f"{settings.API_PREFIX}/auth/login",
         "projects": f"{settings.API_PREFIX}/projects",
+        "upload": f"{settings.API_PREFIX}/projects/upload",
         "docs": "/docs"
     }

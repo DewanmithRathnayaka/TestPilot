@@ -53,13 +53,42 @@ class Project(Base):
     )
 
     # Foreign Key: References the 'id' column of the 'users' table
-    # nullable=True ensures backwards compatibility with existing Day 4 database records
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
         doc="Foreign key linking the project to the owner user"
+    )
+
+    # Day 6 Upload & Validation Metadata
+    original_filename = Column(
+        String(255),
+        nullable=True,
+        doc="Original sanitized filename of the uploaded ZIP archive"
+    )
+    storage_path = Column(
+        String(500),
+        nullable=True,
+        doc="Internal server storage directory holding the extracted project (never exposed to clients)"
+    )
+    source_file_count = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Count of verified Python source files in the src/ directory"
+    )
+    test_file_count = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Count of verified Pytest test files in the tests/ directory"
+    )
+    validation_status = Column(
+        String(50),
+        default="Pending",
+        nullable=False,
+        doc="Structure validation verdict: Pending, Valid, or Invalid"
     )
 
     # Many-to-One Relationship: Each project belongs to one owning User
