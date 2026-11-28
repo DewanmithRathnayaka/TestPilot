@@ -18,6 +18,7 @@ This document records the foundational architectural and technical decisions mad
 - [ADR-011: Argon2id Password Hashing and Stateless JWT Authentication](#adr-011-argon2id-password-hashing-and-stateless-jwt-authentication)
 - [ADR-012: Multi-Tenant Project Authorization via Foreign Key Ownership](#adr-012-multi-tenant-project-authorization-via-foreign-key-ownership)
 - [ADR-013: Defense-in-Depth ZIP Extraction and Static Project Validation](#adr-013-defense-in-depth-zip-extraction-and-static-project-validation)
+- [ADR-014: Pure Static AST Inspection and Test Candidate Discovery](#adr-014-pure-static-ast-inspection-and-test-candidate-discovery)
 
 ---
 
@@ -34,3 +35,20 @@ This document records the foundational architectural and technical decisions mad
   - Enforce static structure validation (`src/` with `.py` files and `tests/` with `test_*.py` files) **without executing any code or installing dependencies**.
   - Prune temporary directories on any validation failure.
 - **Consequences:** Safe, predictable file ingestion with zero risk of host filesystem compromise.
+
+---
+
+## ADR-014: Pure Static AST Inspection and Test Candidate Discovery
+- **Status:** Accepted (Day 7)
+- **Context:** Before executing user-submitted projects in Docker containers, TestPilot must evaluate project readiness, count tests, detect Python syntax errors, and inspect declared dependencies without risking server safety. Running user code or importing untrusted modules (`importlib`) on the host server could execute malicious top-level statements.
+- **Decision:**
+  - Utilize Python's standard `ast` (Abstract Syntax Tree) module (`ast.parse()`) for static inspection.
+  - AST parsing transforms Python source code into syntax trees entirely in memory, checking grammar and structure without executing top-level code or importing modules.
+  - Identify Pytest test candidates strictly through AST node analysis:
+    - Top-level `ast.FunctionDef` and `ast.AsyncFunctionDef` matching `test_*`.
+    - Class nodes `ast.ClassDef` matching `Test*` (excluding `__init__`).
+    - Internal method nodes inside `Test*` classes matching `test_*`.
+  - Parse `requirements.txt` via static string manipulation and regex (PEP 508 identifiers) to identify `pytest` presence and dependency counts without invoking `pip` or network calls.
+  - Enforce a 1 MB per-file safety limit (`MAX_INSPECT_FILE_SIZE`) during AST reading.
+  - Clarify that discovered tests are candidate structures rather than guaranteed executable tests, as runtime fixtures, parameterization, and dependencies will only be evaluated during dynamic execution in Day 8+.
+- **Consequences:** High-speed, zero-risk static verification that provides rich developer diagnostics and early syntax feedback before container provisioning.

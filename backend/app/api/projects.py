@@ -9,6 +9,7 @@ Implements CRUD endpoints and secure ZIP upload handling for software projects:
 - DELETE /api/projects/{id}        (Delete project record)
 """
 from typing import List
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 
@@ -16,8 +17,10 @@ from app.db.session import get_db
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
+from app.schemas.analysis import ProjectAnalysisResponse
 from app.api.deps import get_current_user
 from app.services.upload_service import process_project_upload
+from app.services.project_analyzer import analyze_extracted_project
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -229,3 +232,61 @@ def delete_project(
         "message": f"Project '{project.name}' (ID #{project_id}) was successfully deleted.",
         "id": project_id
     }
+
+
+@router.post(
+    "/{project_id}/analyze",
+    response_model=ProjectAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Statically analyze an uploaded project structure, AST syntax, and test candidates"
+)
+def analyze_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> ProjectAnalysisResponse:
+    """
+    Statically analyzes an uploaded project without executing any code:
+    - Verifies src/ and tests/ hierarchy
+    - Discovers Python files, test files, dependencies, and README
+    - Validates syntax using Python AST (ast.parse)
+    - Discovers test functions, classes, and methods matching Pytest conventions
+    - Inspects requirements.txt for pytest declaration
+    - Updates project status to 'Analyzed' and synchronizes file counts
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with ID {project_id} not found."
+        )
+
+    if project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to analyze this project."
+        )
+
+    if not project.storage_path or not Path(project.storage_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project storage path does not exist on disk or files have not been uploaded."
+        )
+
+    analysis_result = analyze_extracted_project(
+        storage_dir=Path(project.storage_path),
+        project_id=project.id,
+        project_name=project.name
+    )
+
+    # Update project record status and file metrics in SQLite
+    project.status = "Analyzed"
+    project.source_file_count = analysis_result.source_file_count
+    project.test_file_count = analysis_result.test_file_count
+    project.validation_status = (
+        "Valid" if analysis_result.structure_valid and analysis_result.syntax_error_count == 0 else "Invalid"
+    )
+    db.commit()
+    db.refresh(project)
+
+    return analysis_result

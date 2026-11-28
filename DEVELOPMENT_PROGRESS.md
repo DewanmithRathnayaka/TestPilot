@@ -8,8 +8,8 @@ This document tracks daily milestones, completed objectives, and upcoming phases
 
 | Week | Focus Area | Status |
 |---|---|---|
-| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟡 In Progress (Days 1–6 Complete) |
-| **Week 2 (Days 8–14)** | Docker Sandboxing, Pytest Engine & Result Processing | ⚪ Pending |
+| **Week 1 (Days 1–7)** | Foundations, Architecture, Auth, Database & Upload Pipeline | 🟢 Completed (Days 1–7 Complete) |
+| **Week 2 (Days 8–14)** | Docker Sandboxing, Pytest Engine & Result Processing | ⚪ Next Phase |
 | **Week 3 (Days 15–21)** | Frontend Dashboard, PDF Reporting & Final Hardening | ⚪ Pending |
 
 ---
@@ -91,10 +91,31 @@ This document tracks daily milestones, completed objectives, and upcoming phases
   - Full automated regression pipeline passing 54/54 tests across Days 3–6.
   - Connected React frontend: added ZIP upload dropzone, file size indicator, extraction progress feedback, and project card file counters.
 
-- [ ] **Day 7: Project Static Analysis & Code Discovery**
-  - Scan `src/` modules and Pytest test functions using Python `ast` (Abstract Syntax Trees).
-  - Extract discovered function signatures, class definitions, and test names.
-  - Store code metrics and test suite catalog in database.
+- [x] **Day 7: Project Static Analysis & Code Discovery Engine**
+  - Designed pure static inspection engine (`app/services/project_analyzer.py`):
+    - Recursive filesystem discovery with `os.walk` and `pathlib.Path`: safely categorizes `src/` modules, `tests/` suites, dependencies, and READMEs.
+    - Excludes cache artifacts (`__pycache__`, `.pyc`, `.pyo`), hidden files, and rejects symbolic links.
+    - Automatically unwraps single wrapper directories matching standard Day 6 layout conventions.
+    - Implemented AST-based static syntax error detection (`ast.parse()`) with precise line, column, and error message reporting without executing code.
+    - Implemented static AST Pytest test candidate discovery: extracts top-level `test_*` functions (including `async def`), `Test*` classes, and class `test_*` methods.
+    - Ignored helper functions (`helper()`, `setup()`) and standard application classes (`Calculator`, `MockUser`).
+    - Implemented non-invasive `requirements.txt` inspection: checks for `pytest` declaration, extracts packages, handles inline comments, and logs warnings on malformed lines without running `pip` or touching the network.
+    - Enforced strict 1 MB file safety limit (`MAX_INSPECT_FILE_SIZE`) to prevent memory spikes on oversized files.
+    - Maintained security boundary: verified code is **never executed** (no `exec()`, `eval()`, `subprocess`, `importlib`, or `sys.modules` pollution).
+  - Defined Pydantic schemas (`app/schemas/analysis.py`):
+    - `SyntaxErrorDetail` (file, line, column, message).
+    - `ProjectAnalysisResponse` (structural validity, file counts, candidate metrics, syntax errors, dependency info, advisory warnings).
+  - Implemented authenticated REST API endpoint:
+    - `POST /api/projects/{id}/analyze` requiring Bearer JWT authentication and multi-tenant project ownership.
+    - Synchronizes project status to `"Analyzed"`, updates source/test file counts in SQLite database, and returns comprehensive static analysis summary.
+  - Built comprehensive automated test suite `backend/test_analysis.py`:
+    - All 25 required test cases verified with 100% pass rate.
+    - 4 API integration tests verified (401 unauthenticated, 403 unauthorized, 404 not found, 200 authorized).
+    - Full regression pipeline verified across Days 3–7: **83/83 total automated tests passing**.
+  - Enhanced React frontend:
+    - Added "🔍 Analyze AST" trigger to each project card in the dashboard.
+    - Created Static Analysis Report modal displaying structural validity, discovery metrics, AST candidate counts, syntax error tables, and advisory warnings.
+    - Clean TypeScript compilation with Vite (`npm run build`).
 
 ---
 

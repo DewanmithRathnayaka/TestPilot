@@ -172,3 +172,31 @@ Because user code is inherently untrusted, the execution environment implements 
 5. **Privilege De-escalation:**
    - Containers run as an unprivileged user (`UID 1000`), never root.
    - Linux capabilities dropped (`--cap-drop=ALL`).
+
+---
+
+## 🔍 5. Static AST Code Analyzer Subsystem (Day 7)
+
+Before provisioning Docker containers, TestPilot evaluates uploaded projects using a pure static inspection engine (`app.services.project_analyzer`):
+
+1. **Pure In-Memory AST Parsing:**
+   - Source code is parsed into abstract syntax trees using Python's standard `ast.parse()`.
+   - Never calls `import`, `importlib.import_module()`, `exec()`, or `eval()`.
+   - Traps Python syntax errors (`SyntaxError`) statically and returns precise filename, line number, column offset, and compiler error message.
+
+2. **Pytest Candidate Discovery:**
+   - Traverses AST nodes to detect candidate test items based on Pytest standard naming conventions:
+     - Top-level `ast.FunctionDef` / `ast.AsyncFunctionDef` matching `test_*`.
+     - Class definitions `ast.ClassDef` matching `Test*`.
+     - Internal class method definitions `test_*`.
+   - Ignores helper functions (`helper()`, `setup()`) and application business logic classes.
+
+3. **Dependency and Requirements Inspection:**
+   - Inspects `requirements.txt` via static string parsing and regex identifier extraction (PEP 508).
+   - Identifies whether `pytest` is declared as a test dependency.
+   - Strips inline comments and safely warns about malformed requirement declarations without invoking `pip` or network requests.
+
+4. **Resource Bounds & Symlink Safety:**
+   - Traversal via `os.walk(followlinks=False)` ignores symbolic links to prevent filesystem breakout.
+   - Traversal filters out Python bytecode cache (`__pycache__`, `.pyc`).
+   - Caps individual inspected files at 1 MB (`MAX_INSPECT_FILE_SIZE`) to protect against AST memory bloat.

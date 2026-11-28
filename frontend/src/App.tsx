@@ -35,6 +35,38 @@ interface Project {
   validation_status: string;
 }
 
+interface SyntaxErrorDetail {
+  file: string;
+  line: number | null;
+  column: number | null;
+  message: string;
+}
+
+interface ProjectAnalysisResponse {
+  project_id: number;
+  project_name: string;
+  language: string;
+  test_framework: string;
+  analysis_status: string;
+  structure_valid: boolean;
+  source_file_count: number;
+  test_file_count: number;
+  python_file_count: number;
+  total_file_count: number;
+  total_project_size: number;
+  test_function_count: number;
+  test_class_count: number;
+  test_method_count: number;
+  syntax_error_count: number;
+  syntax_errors: SyntaxErrorDetail[];
+  dependencies: string[];
+  has_pytest: boolean;
+  has_requirements_file: boolean;
+  has_readme: boolean;
+  warnings: string[];
+  analysis_timestamp: string;
+}
+
 export default function App() {
   // System status state
   const [health, setHealth] = useState<HealthData | null>(null);
@@ -65,6 +97,12 @@ export default function App() {
   const [uploadLoading, setUploadLoading] = useState<boolean>(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Day 7 Static Analysis State
+  const [analyzingProjectId, setAnalyzingProjectId] = useState<number | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<Record<number, ProjectAnalysisResponse>>({});
+  const [analysisErrors, setAnalysisErrors] = useState<Record<number, string>>({});
+  const [activeAnalysisModal, setActiveAnalysisModal] = useState<ProjectAnalysisResponse | null>(null);
 
   // Check backend health
   const checkBackendStatus = async () => {
@@ -284,8 +322,44 @@ export default function App() {
         throw new Error(data.detail || `HTTP ${res.status}`);
       }
       setProjects((prev) => prev.filter((p) => p.id !== id));
+      setAnalysisResults((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
     } catch (err: unknown) {
       alert(`Deletion failed: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
+  // Handle Project Static Analysis (Day 7)
+  const handleAnalyzeProject = async (projectId: number) => {
+    if (!token) return;
+    setAnalyzingProjectId(projectId);
+    setAnalysisErrors((prev) => ({ ...prev, [projectId]: '' }));
+
+    try {
+      const res = await fetch(API_ENDPOINTS.PROJECT_ANALYZE(projectId), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || `Analysis failed with HTTP ${res.status}`);
+      }
+
+      setAnalysisResults((prev) => ({ ...prev, [projectId]: data }));
+      setActiveAnalysisModal(data);
+      // Refresh project list so status and file counts sync with DB
+      fetchProjects(token);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAnalysisErrors((prev) => ({ ...prev, [projectId]: msg }));
+    } finally {
+      setAnalyzingProjectId(null);
     }
   };
 
@@ -304,7 +378,7 @@ export default function App() {
           <span className="logo-icon">✈️</span>
           <div className="logo-text">
             <h1>TestPilot</h1>
-            <span className="badge">Day 6 – Secure ZIP Upload</span>
+            <span className="badge">Day 7 – Static Structure & AST Analysis</span>
           </div>
         </div>
 
@@ -586,6 +660,25 @@ export default function App() {
                           </div>
                         </div>
 
+                        {/* Day 7 Static Analysis Preview if available */}
+                        {analysisResults[proj.id] && (
+                          <div className="analysis-summary-pill">
+                            <span>🔍 AST Tests: {analysisResults[proj.id].test_function_count + analysisResults[proj.id].test_method_count}</span>
+                            <span>•</span>
+                            <span className={analysisResults[proj.id].syntax_error_count > 0 ? 'text-danger' : 'text-success'}>
+                              {analysisResults[proj.id].syntax_error_count > 0
+                                ? `⚠️ ${analysisResults[proj.id].syntax_error_count} syntax err`
+                                : '✓ Syntax Clean'}
+                            </span>
+                          </div>
+                        )}
+
+                        {analysisErrors[proj.id] && (
+                          <div className="status-badge error" style={{ margin: '0.4rem 0', padding: '4px 8px', fontSize: '0.75rem' }}>
+                            {analysisErrors[proj.id]}
+                          </div>
+                        )}
+
                         <div className="project-card-footer">
                           <div className="meta-info">
                             <span className="lang-tag">🐍 {proj.language}</span>
@@ -593,13 +686,32 @@ export default function App() {
                               {new Date(proj.created_at).toLocaleDateString()}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleDeleteProject(proj.id, proj.name)}
-                            className="btn-delete"
-                            title="Delete project"
-                          >
-                            🗑️ Delete
-                          </button>
+                          <div className="card-actions">
+                            <button
+                              onClick={() => handleAnalyzeProject(proj.id)}
+                              className="btn-analyze"
+                              disabled={analyzingProjectId === proj.id}
+                              title="Perform static AST inspection, detect syntax errors and discover Pytest test candidates"
+                            >
+                              {analyzingProjectId === proj.id ? '⚡ Analyzing...' : '🔍 Analyze AST'}
+                            </button>
+                            {analysisResults[proj.id] && (
+                              <button
+                                onClick={() => setActiveAnalysisModal(analysisResults[proj.id])}
+                                className="btn-view-report"
+                                title="View static AST analysis report"
+                              >
+                                📊 Report
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteProject(proj.id, proj.name)}
+                              className="btn-delete"
+                              title="Delete project"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -607,13 +719,151 @@ export default function App() {
                 )}
               </div>
             </section>
+
+            {/* Day 7: Static Analysis Report Modal */}
+            {activeAnalysisModal && (
+              <div className="modal-backdrop" onClick={() => setActiveAnalysisModal(null)}>
+                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <div>
+                      <span className="project-id-tag">Project #{activeAnalysisModal.project_id}</span>
+                      <h3>Static Analysis Report: {activeAnalysisModal.project_name}</h3>
+                      <span className="sub-tag">Pure Static AST Inspection (Zero Dynamic Execution)</span>
+                    </div>
+                    <button className="btn-close" onClick={() => setActiveAnalysisModal(null)}>✕</button>
+                  </div>
+
+                  <div className="modal-body">
+                    {/* Structure & Validity Status */}
+                    <div className="analysis-status-banner">
+                      <div>
+                        <strong>Structure Verification:</strong>{' '}
+                        <span className={`status-pill status-${activeAnalysisModal.structure_valid ? 'valid' : 'invalid'}`}>
+                          {activeAnalysisModal.structure_valid ? 'Structure Valid' : 'Structure Issues Detected'}
+                        </span>
+                      </div>
+                      <span className="sub-tag">
+                        Analyzed at {new Date(activeAnalysisModal.analysis_timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+
+                    {/* Discovery Metrics Grid */}
+                    <div className="modal-metrics-grid">
+                      <div className="metric-box">
+                        <span className="metric-label">Source Files (src/)</span>
+                        <span className="metric-value">📄 {activeAnalysisModal.source_file_count}</span>
+                      </div>
+                      <div className="metric-box">
+                        <span className="metric-label">Pytest Files (tests/)</span>
+                        <span className="metric-value">🧪 {activeAnalysisModal.test_file_count}</span>
+                      </div>
+                      <div className="metric-box">
+                        <span className="metric-label">Total Python Files</span>
+                        <span className="metric-value">🐍 {activeAnalysisModal.python_file_count}</span>
+                      </div>
+                      <div className="metric-box">
+                        <span className="metric-label">Project Size</span>
+                        <span className="metric-value">💾 {formatFileSize(activeAnalysisModal.total_project_size)}</span>
+                      </div>
+                    </div>
+
+                    {/* AST Pytest Candidate Discovery */}
+                    <div className="report-section">
+                      <h4>🧪 Pytest Candidate Discovery (AST Inferred)</h4>
+                      <div className="modal-metrics-grid">
+                        <div className="metric-box">
+                          <span className="metric-label">Test Functions (test_*)</span>
+                          <span className="metric-value">{activeAnalysisModal.test_function_count}</span>
+                        </div>
+                        <div className="metric-box">
+                          <span className="metric-label">Test Classes (Test*)</span>
+                          <span className="metric-value">{activeAnalysisModal.test_class_count}</span>
+                        </div>
+                        <div className="metric-box">
+                          <span className="metric-label">Class Methods (test_*)</span>
+                          <span className="metric-value">{activeAnalysisModal.test_method_count}</span>
+                        </div>
+                        <div className="metric-box highlight">
+                          <span className="metric-label">Total Candidate Tests</span>
+                          <span className="metric-value">
+                            {activeAnalysisModal.test_function_count + activeAnalysisModal.test_method_count}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="discovery-note">
+                        ℹ️ <em>Note: Candidates are top-level and class-level test definitions identified statically via AST without importing modules or running code.</em>
+                      </p>
+                    </div>
+
+                    {/* Dependencies and Requirements */}
+                    <div className="report-section">
+                      <h4>📦 Environment & Requirements Check</h4>
+                      <div className="requirements-summary">
+                        <span><strong>requirements.txt:</strong> {activeAnalysisModal.has_requirements_file ? '✅ Found' : '❌ Not Found'}</span>
+                        <span><strong>Pytest Declared:</strong> {activeAnalysisModal.has_pytest ? '✅ Yes' : '⚠️ Missing'}</span>
+                        <span><strong>README:</strong> {activeAnalysisModal.has_readme ? '✅ Found' : 'ℹ️ None'}</span>
+                      </div>
+                      {activeAnalysisModal.dependencies.length > 0 && (
+                        <div className="dep-tags-list">
+                          {activeAnalysisModal.dependencies.map((dep, idx) => (
+                            <span key={idx} className="dep-pill">{dep}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Static Syntax Validation Section */}
+                    <div className="report-section">
+                      <h4>🔍 AST Syntax Validation</h4>
+                      {activeAnalysisModal.syntax_error_count === 0 ? (
+                        <div className="status-badge success">
+                          ✓ All {activeAnalysisModal.python_file_count} Python file(s) parsed cleanly with zero syntax errors.
+                        </div>
+                      ) : (
+                        <div className="syntax-errors-container">
+                          <div className="status-badge error">
+                            ⚠️ Found {activeAnalysisModal.syntax_error_count} file(s) with syntax errors:
+                          </div>
+                          <ul className="syntax-error-list">
+                            {activeAnalysisModal.syntax_errors.map((err, idx) => (
+                              <li key={idx} className="syntax-error-item">
+                                <strong>{err.file}</strong> (Line {err.line ?? '?'}, Col {err.column ?? '?'}):
+                                <span> {err.message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Advisory Warnings */}
+                    {activeAnalysisModal.warnings.length > 0 && (
+                      <div className="report-section">
+                        <h4>⚠️ Diagnostic Advisory Warnings</h4>
+                        <ul className="warnings-list">
+                          {activeAnalysisModal.warnings.map((warn, idx) => (
+                            <li key={idx} className="warning-item">{warn}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="modal-footer">
+                    <button className="btn-submit" onClick={() => setActiveAnalysisModal(null)}>
+                      Close Report
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>
 
       {/* Footer */}
       <footer className="footer">
-        <p>TestPilot – University Software Testing Platform • Day 6 Secure Upload Complete</p>
+        <p>TestPilot – University Software Testing Platform • Day 7 AST Static Analysis & Test Discovery Complete</p>
       </footer>
     </div>
   );
